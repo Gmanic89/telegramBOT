@@ -1,4 +1,4 @@
-# Necesitas instalar:
+ Necesitas instalar:
 # pip install pyTelegramBotAPI flask flask-socketio requests
 import os
 import sqlite3
@@ -1223,4 +1223,10 @@ if __name__ == '__main__':
     print("="*60 + "\n")
     
     # Iniciar servidor web
-    socketio.run(app, host='0.0.0.0', port=FLASK_PORT, debug=False)
+    socketio.run(app, host='0.0.0.0', port=FLASK_PORT, debug=False, allow_unsafe_werkzeug=True)
+
+
+
+
+
+
