@@ -500,6 +500,29 @@ HTML_TEMPLATE = '''
         .status-nuevo { background: #ff4444; color: white; }
         .status-pendiente { background: #ffa500; color: white; }
         .status-cerrado { background: #4caf50; color: white; }
+        .message-count-badge {
+            min-width: 28px;
+            height: 28px;
+            padding: 4px 8px;
+            background: #1d9bf0;
+            color: white;
+            border-radius: 50%;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .message-preview {
+            display: block;
+            font-size: 13px;
+            color: #71767b;
+            font-weight: 400;
+            margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
         .conversation-preview {
             font-size: 13px;
             color: #71767b;
@@ -756,16 +779,22 @@ HTML_TEMPLATE = '''
                 const iniciales = conv.nombre.substring(0, 2).toUpperCase();
                 const tiempo = formatearTiempo(conv.ultimo_mensaje);
                 
+                // Obtener preview del último mensaje
+                const preview = conv.ultimo_mensaje_texto || 'Sin mensajes';
+                const previewCorto = preview.length > 50 ? preview.substring(0, 50) + '...' : preview;
+                
                 div.innerHTML = `
                     <div class="conversation-header">
                         <div class="avatar">${iniciales}</div>
                         <div class="conversation-info">
-                            <div class="conversation-name">${conv.nombre}</div>
+                            <div class="conversation-name">
+                                ${conv.nombre}
+                                <span class="message-preview">${previewCorto}</span>
+                            </div>
                             <div class="conversation-time">${tiempo}</div>
                         </div>
-                        <span class="status-badge status-${conv.estado}">${conv.estado}</span>
+                        <span class="message-count-badge">${conv.total_mensajes}</span>
                     </div>
-                    <div class="conversation-preview">${conv.total_mensajes} mensajes</div>
                 `;
                 
                 container.appendChild(div);
@@ -1001,11 +1030,15 @@ def get_conversaciones():
     conn = sqlite3.connect('bot_messages.db', check_same_thread=False)
     c = conn.cursor()
     
+    # Mostrar conversaciones de las últimas 24 horas mínimo
     c.execute('''SELECT c.id, c.user_id, c.username, c.nombre, c.estado,
                         COUNT(m.id) as total_mensajes,
-                        MAX(m.timestamp) as ultimo_mensaje
+                        MAX(m.timestamp) as ultimo_mensaje,
+                        (SELECT mensaje FROM mensajes WHERE conversacion_id = c.id ORDER BY timestamp DESC LIMIT 1) as ultimo_mensaje_texto
                  FROM conversaciones c
                  LEFT JOIN mensajes m ON c.id = m.conversacion_id
+                 WHERE datetime(c.updated_at) >= datetime('now', '-1 day')
+                    OR c.estado != 'cerrado'
                  GROUP BY c.id
                  ORDER BY ultimo_mensaje DESC''')
     
@@ -1018,7 +1051,8 @@ def get_conversaciones():
             'nombre': row[3],
             'estado': row[4],
             'total_mensajes': row[5],
-            'ultimo_mensaje': row[6]
+            'ultimo_mensaje': row[6],
+            'ultimo_mensaje_texto': row[7] if len(row) > 7 else ''
         })
     
     conn.close()
