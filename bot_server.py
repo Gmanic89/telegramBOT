@@ -33,7 +33,7 @@ def init_db():
                   user_id INTEGER UNIQUE,
                   username TEXT,
                   nombre TEXT,
-                  estado TEXT DEFAULT 'nuevo',
+                  estado TEXT DEFAULT 'no_leido',
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     
@@ -77,7 +77,7 @@ def guardar_mensaje(user_id, username, nombre, mensaje, tipo='usuario', media_ty
                      WHERE id = ?''', (nombre, username, conv_id))
     else:
         c.execute('''INSERT INTO conversaciones (user_id, username, nombre, estado)
-                     VALUES (?, ?, ?, 'nuevo')''', (user_id, username, nombre))
+                     VALUES (?, ?, ?, 'no_leido')''', (user_id, username, nombre))
         conv_id = c.lastrowid
     
     c.execute('''INSERT INTO mensajes (conversacion_id, user_id, mensaje, tipo, media_type, media_path)
@@ -455,6 +455,14 @@ HTML_TEMPLATE = '''
             transition: background 0.2s;
             position: relative;
         }
+        .conversation.no-leido {
+            background: #16191e;
+            border-left: 3px solid #1d9bf0;
+        }
+        .conversation.no-leido .conversation-name {
+            font-weight: 700;
+            color: #1d9bf0;
+        }
         .conversation:hover {
             background: #1e2228;
         }
@@ -696,24 +704,23 @@ HTML_TEMPLATE = '''
             <div class="stats">
                 <div class="stat">
                     <span class="stat-number" id="stat-nuevos">0</span>
-                    <span class="stat-label">Nuevos</span>
+                    <span class="stat-label">No leídos</span>
                 </div>
                 <div class="stat">
                     <span class="stat-number" id="stat-pendientes">0</span>
-                    <span class="stat-label">Pendientes</span>
+                    <span class="stat-label">Leídos</span>
                 </div>
                 <div class="stat">
                     <span class="stat-number" id="stat-cerrados">0</span>
-                    <span class="stat-label">Cerrados</span>
+                    <span class="stat-label">Total</span>
                 </div>
             </div>
         </div>
         
         <div class="filters">
             <button class="filter-btn active" data-filter="todos">Todos</button>
-            <button class="filter-btn" data-filter="nuevo">Nuevos</button>
-            <button class="filter-btn" data-filter="pendiente">Pendientes</button>
-            <button class="filter-btn" data-filter="cerrado">Cerrados</button>
+            <button class="filter-btn" data-filter="no_leido">No leídos</button>
+            <button class="filter-btn" data-filter="leido">Leídos</button>
         </div>
         
         <div class="conversations-list" id="conversations-list"></div>
@@ -729,9 +736,8 @@ HTML_TEMPLATE = '''
                 </div>
             </div>
             <div class="chat-actions">
-                <button class="action-btn btn-pendiente" onclick="cambiarEstado('pendiente')">Marcar Pendiente</button>
-                <button class="action-btn btn-cerrar" onclick="cambiarEstado('cerrado')">Cerrar</button>
-                <button class="action-btn" style="background: #1d9bf0; color: white;" onclick="cambiarEstado('nuevo')">Reabrir</button>
+                <button class="action-btn" style="background: #1d9bf0; color: white;" onclick="cambiarEstado('leido')">✓ Marcar como leído</button>
+                <button class="action-btn" style="background: #71767b; color: white;" onclick="cambiarEstado('no_leido')">◯ Marcar como no leído</button>
             </div>
         </div>
         
@@ -773,7 +779,7 @@ HTML_TEMPLATE = '''
             
             filtradas.forEach(conv => {
                 const div = document.createElement('div');
-                div.className = `conversation ${conversacionActual === conv.user_id ? 'active' : ''}`;
+                div.className = `conversation ${conversacionActual === conv.user_id ? 'active' : ''} ${conv.estado === 'no_leido' ? 'no-leido' : ''}`;
                 div.onclick = () => seleccionarConversacion(conv.user_id, conv.nombre, conv.username);
                 
                 const iniciales = conv.nombre.substring(0, 2).toUpperCase();
@@ -1030,15 +1036,13 @@ def get_conversaciones():
     conn = sqlite3.connect('bot_messages.db', check_same_thread=False)
     c = conn.cursor()
     
-    # Mostrar conversaciones de las últimas 24 horas mínimo
+    # Mostrar TODOS los chats siempre (nunca se borran)
     c.execute('''SELECT c.id, c.user_id, c.username, c.nombre, c.estado,
                         COUNT(m.id) as total_mensajes,
                         MAX(m.timestamp) as ultimo_mensaje,
                         (SELECT mensaje FROM mensajes WHERE conversacion_id = c.id ORDER BY timestamp DESC LIMIT 1) as ultimo_mensaje_texto
                  FROM conversaciones c
                  LEFT JOIN mensajes m ON c.id = m.conversacion_id
-                 WHERE datetime(c.updated_at) >= datetime('now', '-1 day')
-                    OR c.estado != 'cerrado'
                  GROUP BY c.id
                  ORDER BY ultimo_mensaje DESC''')
     
@@ -1138,21 +1142,21 @@ def get_stats():
     conn = sqlite3.connect('bot_messages.db', check_same_thread=False)
     c = conn.cursor()
     
-    c.execute('SELECT COUNT(*) FROM conversaciones WHERE estado = "nuevo"')
-    nuevos = c.fetchone()[0]
+    c.execute('SELECT COUNT(*) FROM conversaciones WHERE estado = "no_leido"')
+    no_leidos = c.fetchone()[0]
     
-    c.execute('SELECT COUNT(*) FROM conversaciones WHERE estado = "pendiente"')
-    pendientes = c.fetchone()[0]
+    c.execute('SELECT COUNT(*) FROM conversaciones WHERE estado = "leido"')
+    leidos = c.fetchone()[0]
     
-    c.execute('SELECT COUNT(*) FROM conversaciones WHERE estado = "cerrado"')
-    cerrados = c.fetchone()[0]
+    c.execute('SELECT COUNT(*) FROM conversaciones')
+    total = c.fetchone()[0]
     
     conn.close()
     
     return jsonify({
-        'nuevos': nuevos,
-        'pendientes': pendientes,
-        'cerrados': cerrados
+        'nuevos': no_leidos,
+        'pendientes': leidos,
+        'cerrados': total
     })
 
 # ============= WEBHOOK MERCADOPAGO =============
